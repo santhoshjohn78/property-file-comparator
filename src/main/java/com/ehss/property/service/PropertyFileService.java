@@ -3,9 +3,11 @@ package com.ehss.property.service;
 import com.ehss.property.exceptions.PropertyFileNotFoundException;
 import com.ehss.property.exceptions.PropertyParsingException;
 import com.ehss.property.pojo.ComparedProperties;
+import com.ehss.property.pojo.PropertyEntryStatus;
 import com.ehss.property.pojo.PropertyFile;
 import com.ehss.property.pojo.PropertyFileId;
 import com.ehss.property.repository.PropertyFileRepo;
+import com.ehss.property.util.PropertyFileUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,7 +16,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class PropertyFileService {
@@ -22,6 +27,8 @@ public class PropertyFileService {
     @Autowired
     PropertyFileRepo propertyFileRepo;
 
+    @Autowired
+    PropertyFileUtil propertyFileUtil;
 
     public List<PropertyFile> parsePropertyFile(String name, String payload) throws PropertyParsingException {
 
@@ -58,10 +65,69 @@ public class PropertyFileService {
 
 
     public List<ComparedProperties> compareProperties(String leftFile,String rightFile) throws Exception{
-        List<ComparedProperties> comparedProperties = new ArrayList<>();
+        List<ComparedProperties> comparedPropertiesList = new ArrayList<>();
+        List<PropertyFile> leftFileEntries = propertyFileRepo.findByFileName(leftFile);
+        List<PropertyFile> rightFileEntries = propertyFileRepo.findByFileName(rightFile);
+        Map<String,PropertyFile> rightMap = rightFileEntries.stream().collect(Collectors.toMap(PropertyFile::getPropertyKey, Function.identity()));
+        Map<String,PropertyFile> leftMap = leftFileEntries.stream().collect(Collectors.toMap(PropertyFile::getPropertyKey, Function.identity()));
+        for (Map.Entry<String, PropertyFile> entry : leftMap.entrySet()) {
+            ComparedProperties comparedProperties = ComparedProperties.builder()
+                    .propertyKey(entry.getKey())
+                    .leftPropertyFileEntry(entry.getValue()).build();
+            PropertyFile rightPropertyFile = rightMap.get(entry.getKey());
+            comparedProperties.setRightPropertyFileEntry(rightPropertyFile);
+            if (rightPropertyFile==null){
+                comparedProperties.setPropertyEntryStatus(PropertyEntryStatus.NOTFOUND);
+            }else if (rightPropertyFile.getPropertyValue().equals(entry.getValue().getPropertyValue())){
+                comparedProperties.setPropertyEntryStatus(PropertyEntryStatus.SAME);
+            }else{
+                comparedProperties.setPropertyEntryStatus(PropertyEntryStatus.DIFFERENT);
+            }
+            comparedPropertiesList.add(comparedProperties);
+        }
+        for (Map.Entry<String, PropertyFile> entry : rightMap.entrySet()) {
+            PropertyFile leftPropertyFile = leftMap.get(entry.getKey());
+            if (leftPropertyFile==null){
+                ComparedProperties comparedProperties = ComparedProperties.builder()
+                        .propertyKey(entry.getKey())
+                        .propertyEntryStatus(PropertyEntryStatus.NOTFOUND)
+                        .rightPropertyFileEntry(entry.getValue()).build();
+                comparedPropertiesList.add(comparedProperties);
+            }
+        }
+        return comparedPropertiesList;
+    }
+
+
+    public String mergeProperties(String leftFile,String rightFile,String mergeSide) throws Exception{
+        List<PropertyFile> mergedPropertiesList = new ArrayList<>();
         List<PropertyFile> leftFileEntries = propertyFileRepo.findByFileName(leftFile);
         List<PropertyFile> rightFileEntries = propertyFileRepo.findByFileName(rightFile);
 
-        return comparedProperties;
+        Map<String,PropertyFile> rightMap = rightFileEntries.stream().collect(Collectors.toMap(PropertyFile::getPropertyKey, Function.identity()));
+        Map<String,PropertyFile> leftMap = leftFileEntries.stream().collect(Collectors.toMap(PropertyFile::getPropertyKey, Function.identity()));
+        if ("LEFT".equalsIgnoreCase(mergeSide)){
+            for (Map.Entry<String, PropertyFile> entry : leftMap.entrySet()) {
+                mergedPropertiesList.add(entry.getValue());
+            }
+            for (Map.Entry<String, PropertyFile> entry : rightMap.entrySet()) {
+                PropertyFile leftPropertyFile = leftMap.get(entry.getKey());
+                if (leftPropertyFile==null){
+                    mergedPropertiesList.add(entry.getValue());
+                }
+            }
+
+        }else{
+            for (Map.Entry<String, PropertyFile> entry : rightMap.entrySet()) {
+                mergedPropertiesList.add(entry.getValue());
+            }
+            for (Map.Entry<String, PropertyFile> entry : leftMap.entrySet()) {
+                PropertyFile leftPropertyFile = rightMap.get(entry.getKey());
+                if (leftPropertyFile==null){
+                    mergedPropertiesList.add(entry.getValue());
+                }
+            }
+        }
+        return propertyFileUtil.toString(mergedPropertiesList);
     }
 }

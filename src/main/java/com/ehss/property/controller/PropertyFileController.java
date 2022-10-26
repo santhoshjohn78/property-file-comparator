@@ -35,6 +35,12 @@ public class PropertyFileController {
         return ResponseEntity.ok().body(propertyFileService.compareProperties(leftFileName,rightFileName));
     }
 
+    @PostMapping(value = "/merge/{side}")
+    public ResponseEntity<String> mergeProperties(@RequestParam(required = true) String leftFileName,
+                                                                      @RequestParam(required = true) String rightFileName,
+                                                                    @PathVariable String side) throws Exception{
+        return ResponseEntity.ok().body(propertyFileService.mergeProperties(leftFileName,rightFileName,side));
+    }
 
 
 }
