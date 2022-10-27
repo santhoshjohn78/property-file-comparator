@@ -11,6 +11,7 @@ check if successfully installed
 ```choco install minikube -y```
 
 ### Start minikube pointing to local registry
+```minikube start vm-driver=hyperv```
 
 ```minikube -p minikube docker-env --shell powershell | Invoke-Expression```
 
@@ -34,6 +35,6 @@ check if successfully installed
 
 ```kubectl apply -f .\deployment.yaml```
 
-### Create Service
+### Port forward to test
 
-```kubectl apply -f .\service.yaml```
+```kubectl port-forward svc/property-file-api 8080:8080```
